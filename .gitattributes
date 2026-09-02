@@ -1,0 +1,8 @@
+# Biome formats this repository with LF, and the tagging codemods in
+# tools/tagging/ match on "\n". Checking files out with CRLF would silently
+# break them, so normalise line endings regardless of core.autocrlf.
+* text=auto eol=lf
+
+# Binary assets must never be touched.
+*.png binary
+*.ico binary

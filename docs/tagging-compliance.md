@@ -1,9 +1,12 @@
 # Analytics Tagging Compliance — CI/CD POC
 
-A demo of an intelligent CI/CD stage: when a pull request adds a page, link or
-button, the pipeline checks it against the repository's analytics tagging rules
-and offers a **"Fix it for me"** action that hands the violation to an agent,
-which applies the tagging and pushes a commit.
+A demo of an intelligent CI/CD stage: when a pull request touches a page, link
+or button, the pipeline checks it against the repository's analytics tagging
+rules and offers a **"Fix it for me"** action that hands the violation to an
+agent, which applies the tagging and pushes a commit.
+
+The demo target is the **FTD Educação home page** (`src/app/page.tsx`, route
+`/`) — the same page the app actually serves.
 
 ```
                        TAGGING_RULES.md
@@ -34,8 +37,8 @@ touching the others.
 | Layer | Lives in | Responsibility |
 | --- | --- | --- |
 | 1. Tagging rules | `TAGGING_RULES.md` | The rules, in prose plus a machine-readable ` ```json tagging-policy ` block. Nothing else defines a rule. |
-| 2. Rules loader | `tools/tagging/rules.mjs` | Parses the policy block; scope globbing; message templating. |
-| 3. Scanner | `tools/tagging/scanner.mjs` | Turns a `.tsx` file into an inventory of pages, links and buttons. |
+| 2. Rules loader | `tools/tagging/rules.mjs` | Parses the policy block; scope globbing; message templating; LF-normalised reads. |
+| 3. Scanner | `tools/tagging/scanner.mjs` | Turns a `.tsx` file into an inventory of pages, links and buttons, each with its label, section and loop context. |
 | 4. Analyzer | `tools/tagging/analyzer.mjs` | Applies the rules, computes coverage, returns `COMPLIANT` / `NON_COMPLIANT`. |
 | 5. Report | `tools/tagging/report.mjs` | Renders the result for the terminal, the job summary and the PR comment. |
 | 6. Remediation | `tools/tagging/codemods.mjs`, `tools/tagging/agent/` | Applies the tagging; the agent layer decides *who* applies it. |
@@ -45,8 +48,9 @@ Entry points:
 
 ```bash
 bun run tagging:check   # analyze; exit 1 when NON_COMPLIANT
-bun run tagging:fix     # "Fix it for me": apply the tagging
-bun run demo:reset      # restore the demo's "before" state
+bun run tagging:fix     # "Fix it for me": apply the missing tagging
+bun run demo:reset      # stage the demo's "before" state (home page)
+bun run demo:strip      # regenerate the fixture from the current page
 ```
 
 Useful flags: `--base <ref>` (analyze only what a PR changed), `--commit`,
@@ -54,15 +58,19 @@ Useful flags: `--base <ref>` (analyze only what a PR changed), `--commit`,
 
 ## How the rules work
 
-`TAGGING_RULES.md` carries a JSON policy block that declares the scope, the
-component conventions, the required events and their parameters, the rules
-themselves, and the minimum coverage per category. The analyzer and the agent
-both read that one block, so editing the Markdown changes the behaviour of the
-pipeline — there is no second copy of the rules.
+`TAGGING_RULES.md` carries a JSON policy block declaring the scope, the
+component conventions, the required events and their parameters, the rules, and
+the minimum coverage per category. The analyzer and the agent both read that one
+block, so editing the Markdown changes the behaviour of the pipeline — there is
+no second copy of the rules.
 
 Current rules: `PAGE-001`, `LINK-001`, `LINK-002`, `BTN-001`, `BTN-002`,
-`ABS-001`. Minimum coverage: 100% for new pages, navigation links and primary
-buttons.
+`ABS-001`. Minimum coverage: 100% for pages, navigation links and buttons.
+
+`BTN-001` requires **every** `<button>` to be tracked. A button opts out
+explicitly with `aria-hidden="true"` or `data-analytics="ignore"` — a deliberate
+choice over the old "only if it has an `onClick`" heuristic, which silently
+skipped buttons whose behaviour lives in a parent or a server action.
 
 ## How the compliance check works
 
@@ -70,11 +78,22 @@ buttons.
 2. Drop anything out of scope (`src/app/_components/**`, `layout.tsx`).
 3. Scan each file for its page identity, links and buttons.
 4. Apply every rule; `required` violations fail, `optional` ones warn.
-5. Compute coverage per category and render the report.
+5. Compute coverage per category and render the report, grouped by the page
+   section that renders each element.
 
 The scanner is a lexical pass, not a type-aware AST analysis — enough for this
-repository's conventions and dependency-free. Replacing it with a real AST
-visitor would not change any other layer.
+repository's conventions and dependency-free. Two details it does get right,
+because both produced real bugs during development:
+
+- **`page_view` placement.** `PAGE-001` is satisfied only when
+  `<PageAnalytics />` is rendered by the file's *default-exported* page
+  component. A route file also declares helper components, and a marker dropped
+  into one of those (`Triangle`, rendered 43 times on the home page) would fire
+  43 page views while a file-wide "is it present?" check called it compliant.
+- **`link_position` in loops.** Inside a `.map()` the position must be the loop
+  index. When the callback exposes no index, the prop is omitted rather than
+  written as a constant, which would claim every item in the list sits in the
+  same place.
 
 ## How the remediation works
 
@@ -88,12 +107,22 @@ visitor would not change any other layer.
 Both export the same `remediate({ policy, result, root, log })`, so the CLI and
 the workflow never branch on which one is running.
 
+What the codemods infer, and how:
+
+| Prop | Source |
+| --- | --- |
+| `trackingLabel` | the element's visible text; the heading for card-style links; a JSX expression (`{item.label}`) when the text comes from a variable; a template (`` {`Soluções ${solution.label}`} ``) for mixed content; then `aria-label`, then the single child component's name, then the `href` |
+| `trackingSource` | the enclosing component, as `snake_case` — `SiteHeader` → `site_header`, `HeroSection` → `hero` |
+| `trackingPosition` | the loop's index binding inside a `.map()`; otherwise the element's ordinal within its section |
+| `trackingAction` | `snake_case` of the button's label; the section name when the label is dynamic |
+| `pageName` | the route — `/` → `home`, `/reports/monthly` → `reports_monthly` |
+
 After the agent edits the files, `tools/tagging/remediate.mjs`:
 
 1. formats the result with the repository's own Biome config,
 2. **re-runs the analyzer** — if the result is still `NON_COMPLIANT`, nothing is
    committed and the run exits non-zero,
-3. creates the commit, e.g. `feat(analytics): add tagging to Reports page`.
+3. creates the commit, e.g. `feat(analytics): add tagging to Home page`.
 
 ### Switching to the real Claude Code agent
 
@@ -122,37 +151,51 @@ turns green.
 
 ## Running the demo
 
-The repository ships with `/reports` intentionally **untagged** — that is the
-"before" state.
+The committed repository is **compliant** — `bun run tagging:check` passes. The
+"before" state is staged on demand, so the app in `main` is never left untagged.
 
-### Locally (30 seconds, no GitHub needed)
+### Locally (about a minute, no GitHub needed)
 
 ```bash
-bun run tagging:check   # ❌ FAILED — 4 violations on /reports
+bun run tagging:check   # ✓ PASSED — the committed home page is tagged
+
+bun run demo:reset      # stage the PR: the home page loses its tagging
+bun run tagging:check   # ❌ FAILED — 22 violations across 10 sections of /
 bun run tagging:fix     # 🤖 agent transcript, then COMPLIANT
-git diff                # the tagging changes
-bun run demo:reset      # back to the "before" state
+git diff                # the tagging changes, and nothing else
+
+git checkout src/app/page.tsx   # back to the committed state
 ```
 
 ### On GitHub (the full experience)
 
 ```bash
-git checkout -b feat/reports-page
+git checkout -b feat/home-rework
 bun run demo:reset
-git add src/app/reports && git commit -m "feat: add reports page"
-git push -u origin feat/reports-page
+git commit -am "feat(home): rework the FTD home page"
+git push -u origin feat/home-rework
 gh pr create --fill
 ```
 
 1. **Tagging Compliance** runs and fails.
-2. The PR shows the ❌ comment: *New page detected: `/reports`* with the missing
-   items and the **Fix it for me** button.
+2. The PR shows the ❌ comment: *Untagged page detected: `/`*, the missing items
+   grouped by section, the required events, and the **Fix it for me** button.
 3. Click the button (or comment `/fix-tagging`).
 4. **Tagging Remediation** runs; the job summary shows the agent transcript.
-5. A commit lands on the branch: `feat(analytics): add tagging to Reports page`.
-   The diff shows `<PageAnalytics>`, `<TrackedLink>` and `<TrackedButton>` being
-   added — and nothing else.
+5. A commit lands on the branch: `feat(analytics): add tagging to Home page`
+   (~122 insertions, tagging only).
 6. **Tagging Compliance** re-runs on the new commit and passes ✅.
+
+### The shorter scenario
+
+`/reports` is a second, smaller target — 4 violations instead of 22, for a
+walkthrough that fits in a couple of minutes:
+
+```bash
+bun run demo:reset reports
+bun run tagging:check
+bun run tagging:fix
+```
 
 ### What the fix produces
 
@@ -162,17 +205,38 @@ gh pr create --fill
 +import { TrackedButton } from "~/app/_components/tracked-button";
 +import { TrackedLink } from "~/app/_components/tracked-link";
 
-       <main className="…">
-+       <PageAnalytics pageName="reports" />
--         <Link
-+         <TrackedLink
-             href="/reports/monthly"
-+            trackingLabel="View Report"
-+            trackingPosition={0}
-+            trackingSource="reports"
+ export default function HomePage() {
+     <main className="overflow-x-hidden bg-white">
++      <PageAnalytics pageName="home" />
+
+       {NAV_ITEMS.map((item) => (
+-        <Link
++        <TrackedLink
+           className="flex items-center gap-1.5 …"
+           href="#"
+           key={item.label}
++          trackingLabel={item.label}
++          trackingSource="site_header"
+         >
 ```
 
 No class names, copy, layout or navigation behaviour change — only tagging.
+
+### Keeping the fixture in sync
+
+`demo/home-page.untagged.tsx` is generated from the real page, not maintained by
+hand. After editing `src/app/page.tsx`, regenerate it:
+
+```bash
+bun run demo:strip          # home page
+bun run demo:strip reports  # the /reports scenario
+bun run check:write
+```
+
+`tools/tagging/demo-strip.mjs` removes the tagging components and props, gives
+every bare `<button>` the explicit `type` that `<TrackedButton>` renders, and
+tidies up what the removal orphans (unused loop indices, an unused `offset`
+prop) so the fixture is lint-clean.
 
 ## What is real and what is simulated
 
@@ -180,7 +244,8 @@ No class names, copy, layout or navigation behaviour change — only tagging.
 
 - `TAGGING_RULES.md` as the single source of truth, parsed at runtime.
 - The scanner, analyzer, coverage model and reports.
-- The codemods: they produce real, formatted, type-checking code.
+- The codemods: they produce real, formatted, type-checking code, including
+  expression-valued props inside `.map()` loops.
 - The self-validation step (re-analyze before committing).
 - Both GitHub Actions workflows, the job summary, the sticky PR comment, the
   "Fix it for me" button and the `/fix-tagging` comment trigger.
@@ -201,13 +266,17 @@ No class names, copy, layout or navigation behaviour change — only tagging.
 
 ## Known limitations
 
-- The scanner is lexical. Links and buttons produced by indirection (a `map`
-  over data, a wrapper component, a component from another file) are not
-  detected.
+- The scanner is lexical. A link or button produced by indirection — a wrapper
+  component, or an element rendered from another file — is not detected. Labels
+  come from the JSX at hand, so a link whose only child is a component
+  (`<Wordmark />`) is named after that component rather than the words a user
+  reads; a human refines those.
+- `trackingSource` is derived from the enclosing component, so a link inside a
+  helper such as `FooterColumn` reports `footer_column`, not `site_footer`.
 - The remediation codemods target the conventions in this repository; unusual
   JSX shapes may be left for a human — which the re-validation step surfaces
   rather than committing a bad fix.
 - The remediation workflow pushes to the PR branch, so it works for same-repo
   pull requests, not forks.
-- `bun run tagging:check` on a fresh clone reports `NON_COMPLIANT` **by design**
-  — that is the demo's starting point.
+- `.gitattributes` pins the checkout to LF because the codemods match on `\n`;
+  the tools also normalise on read, so a CRLF working tree still works.

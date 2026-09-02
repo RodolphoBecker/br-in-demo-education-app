@@ -6,10 +6,16 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+
 import { readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { findRule, formatRuleText, isInScope, REPO_ROOT } from "./rules.mjs";
+import {
+	findRule,
+	formatRuleText,
+	isInScope,
+	REPO_ROOT,
+	readSource,
+} from "./rules.mjs";
 import { pageNameFromRoute, scanFile, toSnakeCase } from "./scanner.mjs";
 
 const toPosix = (p) => p.split("\\").join("/");
@@ -68,7 +74,7 @@ export function analyze({ policy, files, root = REPO_ROOT }) {
 	for (const file of inScope) {
 		let source;
 		try {
-			source = readFileSync(join(root, file), "utf8");
+			source = readSource(join(root, file));
 		} catch {
 			continue; // deleted in the PR
 		}
@@ -112,13 +118,25 @@ export function analyze({ policy, files, root = REPO_ROOT }) {
 				add(
 					"LINK-001",
 					{ label: link.label || link.href, pageName },
-					{ line: link.line, label: link.label, href: link.href },
+					{
+						line: link.line,
+						label: link.label,
+						href: link.href,
+						section: link.source,
+						dynamic: !!link.labelExpr,
+					},
 				);
 			} else if (link.missing.length) {
 				add(
 					"LINK-002",
 					{ label: link.label, missingProps: link.missing.join(", ") },
-					{ line: link.line, label: link.label, href: link.href },
+					{
+						line: link.line,
+						label: link.label,
+						href: link.href,
+						section: link.source,
+						dynamic: !!link.labelExpr,
+					},
 				);
 			} else {
 				counters.link.tagged++;
@@ -127,20 +145,31 @@ export function analyze({ policy, files, root = REPO_ROOT }) {
 
 		// BTN-001 / BTN-002
 		for (const button of scan.buttons) {
-			if (!button.tracked && !button.isPrimary) continue; // optional, not required
+			// BTN-001 escape hatches (aria-hidden, data-analytics) opt out here.
+			if (!button.required) continue;
 			if (policy.exempt?.labels?.includes(button.label)) continue;
 			counters.button.total++;
 			if (!button.tracked) {
 				add(
 					"BTN-001",
 					{ label: button.label, action: toSnakeCase(button.label), pageName },
-					{ line: button.line, label: button.label },
+					{
+						line: button.line,
+						label: button.label,
+						section: button.source,
+						dynamic: !!button.labelExpr,
+					},
 				);
 			} else if (button.missing.length) {
 				add(
 					"BTN-002",
 					{ label: button.label, missingProps: button.missing.join(", ") },
-					{ line: button.line, label: button.label },
+					{
+						line: button.line,
+						label: button.label,
+						section: button.source,
+						dynamic: !!button.labelExpr,
+					},
 				);
 			} else {
 				counters.button.tagged++;

@@ -17,6 +17,18 @@ export const REPO_ROOT = resolve(
 
 export const RULES_FILE = "TAGGING_RULES.md";
 
+/**
+ * Reads a source file, normalised to LF line endings.
+ *
+ * Git can hand out CRLF files (`core.autocrlf=true` on Windows) and every
+ * pattern in this pipeline matches on a bare newline, so normalise once, here.
+ * `.gitattributes` pins the checkout to LF as well; this is the belt to that
+ * pair of braces.
+ */
+export function readSource(path) {
+	return readFileSync(path, "utf8").replaceAll("\r\n", "\n");
+}
+
 /** Fenced block that carries the policy, i.e. ```json tagging-policy */
 const POLICY_BLOCK = /```json\s+tagging-policy\s*\n([\s\S]*?)\n```/;
 
@@ -31,7 +43,7 @@ export function loadPolicy(root = REPO_ROOT) {
 
 	let markdown;
 	try {
-		markdown = readFileSync(rulesPath, "utf8");
+		markdown = readSource(rulesPath);
 	} catch {
 		throw new Error(
 			`${RULES_FILE} not found at ${rulesPath}. The tagging pipeline cannot run without it.`,
