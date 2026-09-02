@@ -1,0 +1,145 @@
+name: Tagging Remediation (Fix it for me)
+
+# The "Fix it for me" action.
+#
+#   TAGGING_RULES.md -> agent -> analyze violation -> modify application
+#                    -> validate -> commit -> PR becomes compliant
+#
+# Two ways to trigger it:
+#   * the "Fix it for me" button in the compliance report (workflow_dispatch)
+#   * commenting /fix-tagging on the pull request
+#
+# The agent is selected by TAGGING_AGENT (see tools/tagging/agent/):
+#   mock   (default) deterministic simulation, no API key, no network
+#   claude           the real Claude Code CLI, needs ANTHROPIC_API_KEY
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number to fix (leave empty to fix the default branch)"
+        required: false
+        type: string
+      agent:
+        description: "Remediation agent"
+        required: false
+        default: mock
+        type: choice
+        options: [mock, claude]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  remediate:
+    name: Claude Code tagging remediation
+    runs-on: ubuntu-latest
+
+    # Only run for the button, or for /fix-tagging on a pull request.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.pull_request != null &&
+       contains(github.event.comment.body, '/fix-tagging'))
+
+    steps:
+      - name: Resolve the target pull request
+        id: target
+        env:
+          DISPATCH_PR: ${{ github.event.inputs.pr_number }}
+          COMMENT_PR: ${{ github.event.issue.number }}
+        run: |
+          PR="${DISPATCH_PR:-$COMMENT_PR}"
+          echo "pr=$PR" >> "$GITHUB_OUTPUT"
+          if [ -n "$PR" ]; then
+            echo "Remediating pull request #$PR"
+          else
+            echo "No pull request given — remediating the default branch."
+          fi
+
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check out the pull request branch
+        if: steps.target.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr checkout ${{ steps.target.outputs.pr }}
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Identify the author of the remediation commit
+        run: |
+          git config user.name "claude-code-tagging-agent[bot]"
+          git config user.email "claude-code-tagging-agent[bot]@users.noreply.github.com"
+
+      - name: Run the remediation agent
+        id: fix
+        env:
+          # Switch to `claude` to hand this over to the real Claude Code CLI.
+          TAGGING_AGENT: ${{ github.event.inputs.agent || 'mock' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ "$TAGGING_AGENT" = "claude" ]; then
+            echo "Installing the Claude Code CLI..."
+            npm install -g @anthropic-ai/claude-code
+          fi
+
+          # Applies the tagging, re-runs the analyzer to prove it worked,
+          # and only then creates the commit.
+          node tools/tagging/remediate.mjs --commit --summary
+
+      - name: Validate the application after remediation
+        run: |
+          bun run check
+          bun run typecheck
+          bun run build
+
+      - name: Push the remediation commit
+        run: git push
+
+      - name: Report back on the pull request
+        if: steps.target.outputs.pr != ''
+        uses: actions/github-script@v7
+        env:
+          SUBJECT: ${{ steps.fix.outputs.subject }}
+          CHANGED: ${{ steps.fix.outputs.changed }}
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const files = (process.env.CHANGED || '')
+              .split(' ')
+              .filter(Boolean)
+              .map((f) => `- \`${f}\``)
+              .join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.target.outputs.pr }},
+              body: [
+                '## 🤖 Claude Code — Tagging Remediation',
+                '',
+                'The required tagging has been applied and committed to this branch.',
+                '',
+                `**Commit:** \`${process.env.SUBJECT}\``,
+                '',
+                '**Files changed:**',
+                files,
+                '',
+                `[Full agent transcript](${runUrl})`,
+                '',
+                'The Tagging Compliance check will re-run on the new commit.',
+              ].join('\n'),
+            });

@@ -1,0 +1,120 @@
+name: Tagging Compliance
+
+# Analytics tagging compliance stage of the CI/CD pipeline.
+#
+#   Pull Request -> diff analysis -> compliance check
+#     COMPLIANT      -> the job passes, the pipeline continues
+#     NON_COMPLIANT  -> the job fails with a job summary + PR comment that
+#                       carry a "Fix it for me" button
+#
+# The rules live in TAGGING_RULES.md. This workflow only orchestrates; all the
+# analysis logic is in tools/tagging/.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: tagging-compliance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analytics-tagging:
+    name: Analytics tagging compliance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@v4
+        with:
+          # Full history so the analyzer can diff against the base branch.
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Analyze the changes against TAGGING_RULES.md
+        id: check
+        env:
+          # Powers the "Fix it for me" button in the report.
+          TAGGING_FIX_URL: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/tagging-remediation.yml
+          TAGGING_FIX_COMMAND: /fix-tagging
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # On a pull request, only look at what the PR touched.
+          # Anywhere else, scan the whole app.
+          if [ -n "$BASE_SHA" ]; then
+            BASE_ARGS="--base $BASE_SHA"
+          else
+            BASE_ARGS=""
+          fi
+
+          # --soft: never fail here, so the summary and the PR comment are
+          # always produced. The "Enforce" step below is what fails the build.
+          node tools/tagging/check.mjs $BASE_ARGS \
+            --summary \
+            --markdown tagging-report.md \
+            --json tagging-report.json \
+            --soft
+
+      - name: Comment the result on the pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- analytics-tagging-compliance -->';
+            const body = `${marker}\n${fs.readFileSync('tagging-report.md', 'utf8')}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(
+              (c) => c.user.type === 'Bot' && c.body.includes(marker),
+            );
+
+            // Keep a single sticky comment instead of one per push.
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Upload the compliance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tagging-compliance-report
+          path: |
+            tagging-report.md
+            tagging-report.json
+          if-no-files-found: ignore
+
+      - name: Enforce the minimum tagging coverage
+        if: steps.check.outputs.status != 'COMPLIANT'
+        run: |
+          echo "::error title=Analytics Tagging Compliance::${{ steps.check.outputs.violations }} required tagging rule(s) violated. See the job summary for the details and the \"Fix it for me\" action."
+          exit 1

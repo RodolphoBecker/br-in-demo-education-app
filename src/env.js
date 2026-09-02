@@ -16,7 +16,11 @@ export const env = createEnv({
 	 * `NEXT_PUBLIC_`.
 	 */
 	client: {
-		// NEXT_PUBLIC_CLIENTVAR: z.string(),
+		/**
+		 * Google Analytics 4 measurement ID (e.g. "G-XXXXXXXXXX").
+		 * Optional: when unset, analytics is simply not loaded.
+		 */
+		NEXT_PUBLIC_GA_MEASUREMENT_ID: z.string().startsWith("G-").optional(),
 	},
 
 	/**
@@ -25,7 +29,7 @@ export const env = createEnv({
 	 */
 	runtimeEnv: {
 		NODE_ENV: process.env.NODE_ENV,
-		// NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
+		NEXT_PUBLIC_GA_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
 	},
 	/**
 	 * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

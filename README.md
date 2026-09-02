@@ -27,3 +27,93 @@ You can check out the [create-t3-app GitHub repository](https://github.com/t3-os
 ## How do I deploy this?
 
 Follow our deployment guides for [Vercel](https://create.t3.gg/en/deployment/vercel), [Netlify](https://create.t3.gg/en/deployment/netlify) and [Docker](https://create.t3.gg/en/deployment/docker) for more information.
+
+## Google Analytics
+
+This POC sends GA4 events for page views, link clicks and button clicks.
+See [`TAGGING_RULES.md`](./TAGGING_RULES.md) for the tagging rules the CI/CD
+pipeline enforces.
+
+### Configuration
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | No | GA4 measurement ID, e.g. `G-XXXXXXXXXX`. |
+
+Copy the value into your local `.env`:
+
+```bash
+NEXT_PUBLIC_GA_MEASUREMENT_ID="G-XXXXXXXXXX"
+```
+
+Find it in GA4 → **Admin** → **Data streams** → your web stream. When the variable is
+empty or absent, `gtag.js` is never loaded and every tracking call becomes a no-op —
+the app keeps working normally.
+
+### What was implemented
+
+| File | Purpose |
+| --- | --- |
+| `src/env.js` | Validates `NEXT_PUBLIC_GA_MEASUREMENT_ID` (optional, must start with `G-`). |
+| `src/lib/analytics.ts` | `trackEvent` / `trackLinkClick` / `trackButtonClick` / `trackPageView`; the only place that knows about `gtag`. |
+| `src/app/_components/google-analytics.tsx` | Loads `gtag.js` via `next/script` (`afterInteractive`); renders `null` when unconfigured. |
+| `src/app/_components/page-analytics.tsx` | `PageAnalytics`, emits `page_view` per route (including client-side navigation). |
+| `src/app/_components/tracked-link.tsx` | `TrackedLink`, a `next/link` wrapper that emits the event on click. |
+| `src/app/_components/tracked-button.tsx` | `TrackedButton`, a `<button>` wrapper that emits the event on click. |
+| `src/app/layout.tsx` | Mounts `<GoogleAnalytics />` in the root layout. |
+| `src/app/page.tsx` | Home page links replaced with `TrackedLink`. |
+
+### Events
+
+| Event | Emitted by | Parameters |
+| --- | --- | --- |
+| `page_view` | `<PageAnalytics>` | `page_name`, `page_path`, `page_location`, `page_title` |
+| `link_click` | `<TrackedLink>` | `link_text`, `link_destination`, `link_source`, `link_position`, `page_location` |
+| `button_click` | `<TrackedButton>` | `button_action`, `button_label`, `button_source`, `page_location` |
+
+`gtag('config')` runs with `send_page_view: false`, so `<PageAnalytics>` owns
+every page view. Without it the App Router would report no page view at all on
+client-side navigation.
+
+### Verifying events
+
+1. Set `NEXT_PUBLIC_GA_MEASUREMENT_ID` in `.env` and run `bun dev`.
+2. **Network tab** — filter by `google-analytics.com/g/collect` and click a link; the
+   request query string contains `en=link_click` plus the `ep.link_*` parameters.
+3. **Console** — `window.dataLayer` lists every pushed event.
+4. **GA4 DebugView** — Admin → DebugView, with the
+   [GA Debugger extension](https://chromewebstore.google.com/detail/google-analytics-debugger/jnkmfdileelhofjcijamephohjechhna)
+   enabled, or **Reports → Realtime**.
+
+### Adding tracking elsewhere
+
+```ts
+import { trackEvent } from "~/lib/analytics";
+
+trackEvent("cta_click", { cta_id: "signup" });
+```
+
+## Analytics Tagging Compliance (CI/CD demo)
+
+A pull request that adds a page, link or button is checked against
+[`TAGGING_RULES.md`](./TAGGING_RULES.md) by GitHub Actions. When tagging is
+missing, the check fails with a report and a **"Fix it for me"** button that
+runs a remediation agent, applies the tagging and pushes a commit.
+
+```bash
+bun run tagging:check   # analyze (exit 1 when NON_COMPLIANT)
+bun run tagging:fix     # "Fix it for me" — apply the missing tagging
+bun run demo:reset      # restore the demo's "before" state
+```
+
+The repository ships with `/reports` intentionally untagged, so
+`bun run tagging:check` fails out of the box — that is the demo's starting
+point.
+
+Full architecture, demo script and limitations:
+[`docs/tagging-compliance.md`](./docs/tagging-compliance.md).
+
+> The default remediation agent is a **simulation** (a deterministic codemod
+> runner labelled "Claude Code (simulated)"), not a live AI integration.
+> `tools/tagging/agent/claude-code.mjs` is the seam where a real Claude Code CLI
+> run plugs in.
