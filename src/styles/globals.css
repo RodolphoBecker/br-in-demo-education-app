@@ -2,6 +2,26 @@
 
 @theme {
 	--font-sans:
-		var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
-		"Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+		var(--font-poppins), var(--font-geist-sans), ui-sans-serif, system-ui,
+		sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+		"Noto Color Emoji";
+
+	/* FTD Educação brand palette, sampled from the deployed site. */
+	--color-ftd-red: #ff4f5f;
+	--color-ftd-orange: #ffa100;
+	--color-ftd-purple: #be83ff;
+	--color-ftd-yellow: #ffd200;
+	--color-ftd-sky: #46b2ff;
+	--color-ftd-blue: #0032be;
+	--color-ftd-blue-light: #3796f1;
+	--color-ftd-amber: #faa01e;
+	--color-ftd-card-orange: #faa01e;
+	--color-ftd-gray: #f2f2f3;
+	--color-ftd-gray-button: #b7bac3;
+	--color-ftd-ink: #404040;
+	--color-ftd-body: #666666;
+	--color-ftd-footer-link: #b9b9b9;
+	--color-ftd-lumisfera: #ff5300;
+	--color-ftd-conteudo: #00b4fb;
+	--color-ftd-ionica: #ff7500;
 }
