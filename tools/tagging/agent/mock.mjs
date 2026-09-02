@@ -10,7 +10,7 @@
  * where a real Claude Code invocation goes.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	addMissingProps,
@@ -18,7 +18,7 @@ import {
 	trackButton,
 	trackLink,
 } from "../codemods.mjs";
-import { RULES_FILE } from "../rules.mjs";
+import { RULES_FILE, readSource } from "../rules.mjs";
 import { scanFile, toSnakeCase } from "../scanner.mjs";
 
 export const name = "mock";
@@ -71,7 +71,7 @@ export async function remediate({ policy, result, root, log }) {
 		);
 
 		const absolute = join(root, file);
-		let source = readFileSync(absolute, "utf8");
+		let source = readSource(absolute);
 		const pageName = violations[0].pageName;
 
 		// PAGE-001 first: it only inserts a child, so element offsets stay valid
@@ -89,7 +89,11 @@ export async function remediate({ policy, result, root, log }) {
 
 			const untrackedLink = scan.links.find((l) => !l.tracked);
 			if (untrackedLink) {
-				const position = scan.links.filter((l) => l.tracked).length;
+				// Ordinal within its own section, so positions stay meaningful
+				// when a page has several groups of links.
+				const position = scan.links.filter(
+					(l) => l.tracked && l.source === untrackedLink.source,
+				).length;
 				source = trackLink(source, {
 					policy,
 					element: untrackedLink,
@@ -103,7 +107,7 @@ export async function remediate({ policy, result, root, log }) {
 			}
 
 			const untrackedButton = scan.buttons.find(
-				(b) => !b.tracked && b.isPrimary,
+				(b) => !b.tracked && b.required,
 			);
 			if (untrackedButton) {
 				source = trackButton(source, {

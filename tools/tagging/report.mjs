@@ -5,6 +5,9 @@
  * Actions job summary, and the pull request comment.
  */
 
+/** Findings listed in full before the table collapses into a count. */
+const MAX_ROWS = 14;
+
 const BADGE =
 	"https://img.shields.io/badge/%F0%9F%A4%96%20Fix%20it%20for%20me-Run%20the%20Claude%20Code%20agent-2ea44f?style=for-the-badge";
 
@@ -17,15 +20,37 @@ const groupByFile = (violations) => {
 	return groups;
 };
 
+/**
+ * How the element reads in a report.
+ *
+ * A static label is quoted; a label that comes from a variable is described,
+ * because `"item.label"` means nothing to someone watching the pipeline run.
+ */
+const elementName = (v) => {
+	if (!v.label) return "an unnamed element";
+	return v.dynamic ? `the items rendered from \`${v.label}\`` : `"${v.label}"`;
+};
+
 const plainMessage = (v) =>
 	({
 		"PAGE-001": "Page analytics configuration",
-		"LINK-001": `Click tracking for the "${v.label || v.href}" link`,
-		"LINK-002": `Complete click tracking for the "${v.label}" link`,
-		"BTN-001": `Click tracking for the "${v.label}" button`,
-		"BTN-002": `Complete click tracking for the "${v.label}" button`,
+		"LINK-001": `Click tracking for ${elementName(v)}`,
+		"LINK-002": `Complete click tracking for ${elementName(v)}`,
+		"BTN-001": `Click tracking for the ${elementName(v)} button`,
+		"BTN-002": `Complete click tracking for the ${elementName(v)} button`,
 		"ABS-001": "Use of the shared analytics helper",
 	})[v.ruleId] ?? v.message;
+
+/** Groups findings by the page section that renders them. */
+function groupBySection(violations) {
+	const groups = new Map();
+	for (const v of violations) {
+		const key = v.section || "page";
+		if (!groups.has(key)) groups.set(key, []);
+		groups.get(key).push(v);
+	}
+	return groups;
+}
 
 /** Human-facing summary of the required events, for the report body. */
 function requiredEvents(result) {
@@ -74,12 +99,16 @@ export function renderConsole(result) {
 		lines.push("  tagging requirements.");
 		lines.push("");
 		lines.push(`  File: ${file}`);
+		lines.push(`  Missing: ${violations.length} item(s)`);
 		lines.push("");
-		lines.push("  Missing:");
-		for (const v of violations) {
-			lines.push(`    - ${plainMessage(v)}  (${v.ruleId}, line ${v.line})`);
+
+		for (const [section, found] of groupBySection(violations)) {
+			lines.push(`    ${section}  (${found.length})`);
+			for (const v of found) {
+				lines.push(`      - ${plainMessage(v)}  [${v.ruleId}, line ${v.line}]`);
+			}
+			lines.push("");
 		}
-		lines.push("");
 	}
 
 	for (const [event, params] of requiredEvents(result)) {
@@ -143,7 +172,14 @@ export function renderMarkdown(result, ctx = {}) {
 		...new Set(result.violations.filter((v) => v.route).map((v) => v.route)),
 	];
 	if (pages.length) {
-		md.push(`> **New page detected: \`${pages.join("`, `")}\`**`);
+		// A page with no page-level tagging at all reads as newly added; one
+		// that has it but is missing click tracking was edited.
+		const untagged = result.violations.some((v) => v.ruleId === "PAGE-001");
+		md.push(
+			untagged
+				? `> **Untagged page detected: \`${pages.join("`, `")}\`**`
+				: `> **Page affected: \`${pages.join("`, `")}\`**`,
+		);
 		md.push(">");
 		md.push("> This page does not meet the minimum tagging requirements.");
 		md.push("");
@@ -152,15 +188,31 @@ export function renderMarkdown(result, ctx = {}) {
 		md.push("");
 	}
 
-	md.push("### Missing");
+	md.push(`### Missing — ${result.violations.length} item(s)`);
 	md.push("");
 	for (const [file, violations] of groupByFile(result.violations)) {
 		md.push(`**\`${file}\`**`);
 		md.push("");
-		md.push("| | What is missing | Rule | Line |");
-		md.push("| --- | --- | --- | --- |");
-		for (const v of violations) {
-			md.push(`| • | ${plainMessage(v)} | \`${v.ruleId}\` | ${v.line} |`);
+		md.push("| Section | What is missing | Rule | Line |");
+		md.push("| --- | --- | --- | ---: |");
+
+		let shown = 0;
+		for (const [section, found] of groupBySection(violations)) {
+			for (const v of found) {
+				if (shown >= MAX_ROWS) break;
+				md.push(
+					`| \`${section}\` | ${plainMessage(v)} | \`${v.ruleId}\` | ${v.line} |`,
+				);
+				shown++;
+			}
+			if (shown >= MAX_ROWS) break;
+		}
+
+		if (violations.length > shown) {
+			const remaining = violations.length - shown;
+			md.push(
+				`| … | **and ${remaining} more** — see the job log or the \`tagging-compliance-report\` artifact | | |`,
+			);
 		}
 		md.push("");
 	}

@@ -1,6 +1,18 @@
-import { PageAnalytics } from "~/app/_components/page-analytics";
-import { TrackedButton } from "~/app/_components/tracked-button";
-import { TrackedLink } from "~/app/_components/tracked-link";
+// DEMO FIXTURE — the "before" state of the tagging compliance demo.
+//
+// The FTD Educação home page exactly as it appears in src/app/page.tsx, with
+// one difference: every piece of analytics tagging has been removed. No
+// <PageAnalytics>, plain <Link> instead of <TrackedLink>, plain <button>
+// instead of <TrackedButton>, and none of the tracking props.
+//
+// It stands in for a pull request that reworks the home page and forgets the
+// tagging. `bun run tagging:check` reports one violation per untracked
+// element; `bun run tagging:fix` puts the tagging back.
+//
+// Regenerate with `bun run demo:strip`; stage with `bun run demo:reset`.
+// --- fixture content below ---
+
+import Link from "next/link";
 
 /**
  * Static reproduction of the deployed FTD Educação home page (see
@@ -125,48 +137,30 @@ function SiteHeader() {
 	return (
 		<header className="absolute inset-x-0 top-0 z-20">
 			<div className={`${CONTAINER} flex h-[112px] items-center gap-8`}>
-				<TrackedLink
-					className="text-white"
-					href="#"
-					trackingLabel="FTD Educação"
-					trackingPosition={0}
-					trackingSource="site_header"
-				>
+				<Link className="text-white" href="#">
 					<Wordmark subColor="text-white" />
-				</TrackedLink>
+				</Link>
 
 				<nav className="ml-auto flex items-center gap-7">
-					{NAV_ITEMS.map((item, index) => (
-						<TrackedLink
+					{NAV_ITEMS.map((item) => (
+						<Link
 							className="flex items-center gap-1.5 font-semibold text-[15px] text-white"
 							href="#"
 							key={item.label}
-							trackingLabel={item.label}
-							trackingPosition={index + 1}
-							trackingSource="site_header"
 						>
 							{item.label}
 							{item.hasMenu ? <Caret className="w-[11px]" /> : null}
-						</TrackedLink>
+						</Link>
 					))}
 
-					<TrackedLink
+					<Link
 						className="rounded-full bg-ftd-yellow px-6 py-2.5 font-bold text-[15px] text-black"
 						href="#"
-						trackingLabel="Lumisfera"
-						trackingPosition={6}
-						trackingSource="site_header"
 					>
 						Lumisfera
-					</TrackedLink>
+					</Link>
 
-					<TrackedButton
-						aria-label="Buscar"
-						className="text-white"
-						trackingAction="open_search"
-						trackingLabel="Buscar"
-						trackingSource="site_header"
-					>
+					<button aria-label="Buscar" className="text-white" type="button">
 						<svg
 							aria-hidden="true"
 							className="h-[22px] w-[22px]"
@@ -179,7 +173,7 @@ function SiteHeader() {
 							<circle cx="10.5" cy="10.5" r="7" />
 							<path d="m16 16 5 5" />
 						</svg>
-					</TrackedButton>
+					</button>
 				</nav>
 			</div>
 		</header>
@@ -235,15 +229,12 @@ function HeroSection() {
 							Pública
 						</span>
 					</p>
-					<TrackedLink
+					<Link
 						className="mt-7 inline-block rounded-lg bg-black px-8 py-3 font-bold text-[15px] text-white"
 						href="#"
-						trackingLabel="Cadastre-se grátis"
-						trackingPosition={0}
-						trackingSource="hero"
 					>
 						Cadastre-se grátis
-					</TrackedLink>
+					</Link>
 				</div>
 
 				{/* Supporting copy */}
@@ -329,15 +320,12 @@ function StatsSection() {
 					<br />
 					para serem os cidadãos do amanhã.
 				</h2>
-				<TrackedLink
+				<Link
 					className="mt-8 inline-block rounded-lg bg-black px-7 py-3 font-bold text-[15px] text-white"
 					href="#"
-					trackingLabel="Saiba mais — Educamos as crianças de hoje"
-					trackingPosition={0}
-					trackingSource="stats"
 				>
 					Saiba mais
-				</TrackedLink>
+				</Link>
 
 				<dl className="mt-[92px] grid grid-cols-3 gap-x-[76px]">
 					{STATS.map((stat) => (
@@ -383,12 +371,9 @@ function PersonasSection() {
 		<section className="bg-white pt-[236px]">
 			<div className="mx-auto flex w-full max-w-[1400px] justify-center px-5 [margin-bottom:-60px]">
 				{/* Escolas */}
-				<TrackedLink
+				<Link
 					className="relative -mr-[10px] block h-[568px] w-[480px] translate-y-[50px] overflow-hidden rounded-[88px_48px_88px_48px] bg-ftd-card-orange"
 					href="#"
-					trackingLabel="Escolas"
-					trackingPosition={0}
-					trackingSource="personas"
 				>
 					<svg
 						aria-hidden="true"
@@ -409,15 +394,12 @@ function PersonasSection() {
 						</p>
 					</div>
 					<Blank className="absolute bottom-0 left-1/2 h-[300px] w-[190px] -translate-x-1/2 rounded-t-2xl" />
-				</TrackedLink>
+				</Link>
 
 				{/* Estudantes */}
-				<TrackedLink
+				<Link
 					className="relative z-10 -mr-[10px] block h-[568px] w-[480px] translate-y-[100px] overflow-hidden rounded-[88px_48px_88px_48px] bg-ftd-purple"
 					href="#"
-					trackingLabel="Estudantes"
-					trackingPosition={1}
-					trackingSource="personas"
 				>
 					<div
 						aria-hidden="true"
@@ -436,15 +418,12 @@ function PersonasSection() {
 						</p>
 					</div>
 					<Blank className="absolute bottom-0 left-1/2 h-[262px] w-[168px] -translate-x-1/2 rounded-t-2xl" />
-				</TrackedLink>
+				</Link>
 
 				{/* Famílias */}
-				<TrackedLink
+				<Link
 					className="relative block h-[568px] w-[480px] overflow-hidden rounded-[88px_48px_88px_48px] bg-ftd-red"
 					href="#"
-					trackingLabel="Famílias"
-					trackingPosition={2}
-					trackingSource="personas"
 				>
 					<svg
 						aria-hidden="true"
@@ -462,7 +441,7 @@ function PersonasSection() {
 						</p>
 					</div>
 					<Blank className="absolute bottom-0 left-1/2 h-[336px] w-[248px] -translate-x-1/2 rounded-t-2xl" />
-				</TrackedLink>
+				</Link>
 			</div>
 		</section>
 	);
@@ -503,14 +482,11 @@ function SolutionsSection() {
 				</div>
 
 				<ul className="mt-[52px] grid grid-cols-4 gap-[17px]">
-					{SOLUTIONS.map((solution, index) => (
+					{SOLUTIONS.map((solution) => (
 						<li key={solution.label}>
-							<TrackedLink
+							<Link
 								className="relative block h-[410px] overflow-hidden rounded-[18px] shadow-[0_16px_30px_-10px_rgba(0,0,0,0.45)]"
 								href="#"
-								trackingLabel={`Soluções ${solution.label}`}
-								trackingPosition={index}
-								trackingSource="solutions"
 							>
 								<Blank className="absolute inset-0" />
 								<div
@@ -525,7 +501,7 @@ function SolutionsSection() {
 									<br />
 									<span className="font-bold">{solution.label}</span>
 								</span>
-							</TrackedLink>
+							</Link>
 						</li>
 					))}
 				</ul>
@@ -572,7 +548,7 @@ function BrandsSection() {
 			/>
 			<div className={`${CONTAINER} relative`}>
 				<ul className="grid grid-cols-3 gap-x-[76px]">
-					{BRANDS.map((brand, index) => (
+					{BRANDS.map((brand) => (
 						<li className="flex flex-col" key={brand.name}>
 							<Blank
 								className={`h-[131px] w-[131px] rounded-[30px] ${brand.iconClass}`}
@@ -586,15 +562,12 @@ function BrandsSection() {
 							<p className="mt-3 text-[15px] text-ftd-body leading-[1.6]">
 								{brand.body}
 							</p>
-							<TrackedLink
+							<Link
 								className="mt-6 inline-block self-start rounded-[10px] bg-ftd-gray-button px-8 py-[11px] font-bold text-[14px] text-black"
 								href="#"
-								trackingLabel={`Saiba mais — ${brand.name}`}
-								trackingPosition={index}
-								trackingSource="brands"
 							>
 								Saiba mais
-							</TrackedLink>
+							</Link>
 						</li>
 					))}
 				</ul>
@@ -615,15 +588,12 @@ function TransformSection() {
 				<h2 className="max-w-[620px] font-bold text-[36px] text-white leading-[1.25]">
 					Soluções que transformam a Educação no país.
 				</h2>
-				<TrackedLink
+				<Link
 					className="mt-8 inline-block self-start rounded-full bg-ftd-amber px-9 py-3 font-bold text-[15px] text-white"
 					href="#"
-					trackingLabel="Saiba mais — Soluções que transformam"
-					trackingPosition={0}
-					trackingSource="transform"
 				>
 					Saiba mais
-				</TrackedLink>
+				</Link>
 			</div>
 		</section>
 	);
@@ -656,32 +626,23 @@ function NewsSection() {
 							falam sobre a <span className="font-bold">FTD Educação</span>.
 						</h2>
 					</div>
-					<TrackedLink
+					<Link
 						className="mt-6 shrink-0 rounded-full bg-black px-8 py-[15px] font-bold text-[15px] text-white"
 						href="#"
-						trackingLabel="Leia mais"
-						trackingPosition={0}
-						trackingSource="news"
 					>
 						Leia mais
-					</TrackedLink>
+					</Link>
 				</div>
 
 				<ul className="mt-[64px] grid grid-cols-3 gap-x-[76px]">
-					{NEWS.map((item, index) => (
+					{NEWS.map((item) => (
 						<li key={item.title}>
-							<TrackedLink
-								className="block"
-								href="#"
-								trackingLabel={item.title}
-								trackingPosition={index}
-								trackingSource="news"
-							>
+							<Link className="block" href="#">
 								<Blank className="h-[165px] w-full rounded-[8px_72px_72px_8px]" />
 								<h3 className="mt-6 font-bold text-[#555555] text-[17px] leading-[1.45]">
 									{item.title}
 								</h3>
-							</TrackedLink>
+							</Link>
 						</li>
 					))}
 				</ul>
@@ -732,35 +693,21 @@ function NewsletterSection() {
 					<p className="mt-[13px] text-[15px] text-white/60 leading-[1.5]">
 						Ao clicar em assinar, você concorda em receber comunicados da FTD e
 						com a{" "}
-						<TrackedLink
-							className="underline"
-							href="#"
-							trackingLabel="Política de Privacidade"
-							trackingPosition={0}
-							trackingSource="newsletter"
-						>
+						<Link className="underline" href="#">
 							Política de Privacidade
-						</TrackedLink>{" "}
+						</Link>{" "}
 						e{" "}
-						<TrackedLink
-							className="underline"
-							href="#"
-							trackingLabel="Termos de Uso"
-							trackingPosition={1}
-							trackingSource="newsletter"
-						>
+						<Link className="underline" href="#">
 							Termos de Uso
-						</TrackedLink>
+						</Link>
 						.
 					</p>
-					<TrackedButton
+					<button
 						className="mt-[13px] h-[54px] w-full rounded-lg bg-black text-[15px] text-white"
-						trackingAction="newsletter_subscribe"
-						trackingLabel="Assinar"
-						trackingSource="newsletter"
+						type="button"
 					>
 						Assinar
-					</TrackedButton>
+					</button>
 				</div>
 			</div>
 		</section>
@@ -824,12 +771,10 @@ const SOCIAL_ICONS = [
 function FooterColumn({
 	heading,
 	items,
-	offset,
 	spacing,
 }: {
 	heading: string;
 	items: string[];
-	offset: number;
 	spacing: string;
 }) {
 	return (
@@ -838,17 +783,14 @@ function FooterColumn({
 				{heading}
 			</h3>
 			<ul className={`mt-5 flex flex-col ${spacing}`}>
-				{items.map((item, index) => (
+				{items.map((item) => (
 					<li key={item}>
-						<TrackedLink
+						<Link
 							className="text-[15px] text-ftd-footer-link leading-[1.35]"
 							href="#"
-							trackingLabel={item}
-							trackingPosition={offset + index}
-							trackingSource="site_footer"
 						>
 							{item}
-						</TrackedLink>
+						</Link>
 					</li>
 				))}
 			</ul>
@@ -864,13 +806,11 @@ function SiteFooter() {
 					<FooterColumn
 						heading="Soluções"
 						items={FOOTER_SOLUTIONS}
-						offset={0}
 						spacing="gap-[11px]"
 					/>
 					<FooterColumn
 						heading="Institucional"
 						items={FOOTER_INSTITUTIONAL}
-						offset={10}
 						spacing="gap-[24px]"
 					/>
 
@@ -885,44 +825,32 @@ function SiteFooter() {
 						</p>
 						<h3 className="mt-4 font-bold text-[17px] text-white">Acesse</h3>
 						<ul className="mt-3 flex flex-col gap-[2px]">
-							{FOOTER_ACCESS.map((item, index) => (
+							{FOOTER_ACCESS.map((item) => (
 								<li key={item}>
-									<TrackedLink
+									<Link
 										className="text-[15px] text-ftd-footer-link leading-[1.6]"
 										href="#"
-										trackingLabel={item}
-										trackingPosition={17 + index}
-										trackingSource="site_footer"
 									>
 										{item}
-									</TrackedLink>
+									</Link>
 								</li>
 							))}
 						</ul>
 					</div>
 
 					<div>
-						<TrackedLink
-							className="inline-block text-white"
-							href="#"
-							trackingLabel="FTD Educação"
-							trackingPosition={24}
-							trackingSource="site_footer"
-						>
+						<Link className="inline-block text-white" href="#">
 							<Wordmark subColor="text-ftd-sky" />
-						</TrackedLink>
+						</Link>
 						<Blank className="!bg-[#d8231f] mt-7 h-[62px] w-[170px]" />
 						<Blank className="!bg-neutral-800 mt-8 h-[74px] w-[170px]" />
 						<ul className="mt-6 flex items-center gap-[22px]">
-							{SOCIAL_ICONS.map((icon, index) => (
+							{SOCIAL_ICONS.map((icon) => (
 								<li key={icon.label}>
-									<TrackedLink
+									<Link
 										aria-label={icon.label}
 										className="block text-white"
 										href="#"
-										trackingLabel={icon.label}
-										trackingPosition={25 + index}
-										trackingSource="site_footer"
 									>
 										<svg
 											aria-hidden="true"
@@ -932,7 +860,7 @@ function SiteFooter() {
 										>
 											<path d={icon.path} />
 										</svg>
-									</TrackedLink>
+									</Link>
 								</li>
 							))}
 						</ul>
@@ -963,7 +891,6 @@ function SiteFooter() {
 export default function HomePage() {
 	return (
 		<main className="overflow-x-hidden bg-white">
-			<PageAnalytics pageName="home" />
 			<HeroSection />
 			<StatsSection />
 			<PersonasSection />

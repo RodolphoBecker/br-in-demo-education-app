@@ -69,19 +69,35 @@ allowed for user-facing navigation. Use `<TrackedLink>`.
 Every `<TrackedLink>` must set `trackingLabel` (the visible text) and `href`
 (the destination). `trackingSource` and `trackingPosition` are recommended.
 
+`trackingLabel` may be a literal (`trackingLabel="Lumisfera"`), an expression
+(`trackingLabel={item.label}`) or a template
+(``trackingLabel={`Soluções ${solution.label}`}``) — whatever reflects the text
+the user actually sees. Inside a `.map()`, prefer the expression so every item
+reports its own label.
+
 Required event: `link_click`
 Required parameters: `link_text`, `link_destination`
 
-### BTN-001 — Every primary button emits `button_click` · **required**
+### BTN-001 — Every button emits `button_click` · **required**
 
-A **primary button** is a `<button>` that carries an `onClick` handler or
-`type="submit"` — one that represents a meaningful user action. It must be a
-`<TrackedButton>`.
+Every `<button>` in scope must be a `<TrackedButton>`. A button is a user
+action, and a user action is an event.
 
-Buttons that only toggle local presentation (open/close a disclosure, focus an
-input) are **optional**. Buttons rendered inside the tracking components in
-`src/app/_components/` are **not required** to be tagged — that is where the
-tagging itself is implemented.
+A button is **not required** to be tagged when it is decorative or purely
+presentational, which it declares explicitly:
+
+| Escape hatch | Use for |
+| --- | --- |
+| `aria-hidden="true"` | decoration that is not exposed to users at all |
+| `data-analytics="ignore"` | a real control whose clicks are deliberately not measured |
+
+Buttons rendered inside the tracking components in `src/app/_components/` are
+also **not required** — that is where the tagging itself is implemented.
+
+> **Why an explicit escape hatch:** the previous heuristic ("a button counts
+> only if it has an `onClick`") silently ignored every button whose behaviour
+> lives elsewhere — a form submit, a server action, an icon button wired up by a
+> parent. Opting out on purpose is safer than being skipped by accident.
 
 ### BTN-002 — Button events carry an action and a label · **required**
 
@@ -118,7 +134,7 @@ it touches.
 | --- | --- |
 | New pages | **100%** |
 | New navigation links | **100%** |
-| New primary buttons | **100%** |
+| New buttons | **100%** |
 | Meaningful interactive elements | must have an associated analytics event |
 
 Any `required` rule violation makes the result `NON_COMPLIANT`. `optional`
@@ -156,7 +172,8 @@ the prose above — the prose is for humans, this block is what the pipeline run
       "component": "TrackedButton",
       "importFrom": "~/app/_components/tracked-button",
       "requiredProps": ["trackingAction", "trackingLabel"],
-      "recommendedProps": ["trackingSource"]
+      "recommendedProps": ["trackingSource"],
+      "exemptWhenAttribute": ["aria-hidden", "data-analytics"]
     }
   },
   "events": {
@@ -199,7 +216,7 @@ the prose above — the prose is for humans, this block is what the pipeline run
       "id": "BTN-001",
       "level": "required",
       "category": "button",
-      "title": "Every primary button emits button_click",
+      "title": "Every button emits button_click",
       "detects": "untrackedButton",
       "event": "button_click",
       "message": "The button \"{label}\" is not tracked.",

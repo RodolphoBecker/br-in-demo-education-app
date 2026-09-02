@@ -1,11 +1,12 @@
-// DEMO FIXTURE — the "before" state of the tagging compliance demo.
+// DEMO FIXTURE — a smaller "before" state for the tagging compliance demo.
 //
-// This is what a developer's pull request looks like when they add a new page
-// without following TAGGING_RULES.md: no <PageAnalytics>, a plain <Link> and a
-// plain <button>. `bun run tagging:check` reports four violations against it.
+// The /reports page with its analytics tagging removed: no <PageAnalytics>, a
+// plain <Link> and a plain <button>. Four violations instead of the home page's
+// twenty-two, for a shorter walkthrough.
 //
-// `bun run demo:reset` copies this file over src/app/reports/page.tsx to replay
-// the demo after a remediation run.
+// Regenerate with `bun run demo:strip reports`; stage with
+// `bun run demo:reset reports`.
+// --- fixture content below ---
 
 "use client";
 

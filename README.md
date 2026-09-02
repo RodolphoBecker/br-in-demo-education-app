@@ -95,20 +95,24 @@ trackEvent("cta_click", { cta_id: "signup" });
 
 ## Analytics Tagging Compliance (CI/CD demo)
 
-A pull request that adds a page, link or button is checked against
+A pull request that touches a page, link or button is checked against
 [`TAGGING_RULES.md`](./TAGGING_RULES.md) by GitHub Actions. When tagging is
 missing, the check fails with a report and a **"Fix it for me"** button that
 runs a remediation agent, applies the tagging and pushes a commit.
 
+The demo target is the **FTD Educação home page** (`src/app/page.tsx`).
+
 ```bash
 bun run tagging:check   # analyze (exit 1 when NON_COMPLIANT)
-bun run tagging:fix     # "Fix it for me" — apply the missing tagging
-bun run demo:reset      # restore the demo's "before" state
+bun run demo:reset      # stage the "before" state: the home page loses its tagging
+bun run tagging:fix     # "Fix it for me" — put the tagging back
+bun run demo:strip      # regenerate the fixture from the current page
 ```
 
-The repository ships with `/reports` intentionally untagged, so
-`bun run tagging:check` fails out of the box — that is the demo's starting
-point.
+The committed repository is compliant, so `bun run tagging:check` passes out of
+the box. `demo:reset` stages the untagged home page — 22 violations across ten
+sections — and `tagging:fix` resolves them; `git checkout src/app/page.tsx`
+restores it. `bun run demo:reset reports` is a shorter, 4-violation scenario.
 
 Full architecture, demo script and limitations:
 [`docs/tagging-compliance.md`](./docs/tagging-compliance.md).

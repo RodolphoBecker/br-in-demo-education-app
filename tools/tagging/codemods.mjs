@@ -9,7 +9,7 @@
  * component names and prop names are never hardcoded here.
  */
 
-import { readAttr, toSnakeCase } from "./scanner.mjs";
+import { defaultExportBody, readAttr, toSnakeCase } from "./scanner.mjs";
 
 /** Adds `import { X } from "…"` if it is not already there. */
 function ensureImport(source, componentName, importFrom) {
@@ -55,17 +55,38 @@ function indentAt(source, index) {
  */
 export function addPageAnalytics(source, { policy, pageName }) {
 	const { component, importFrom } = policy.conventions.pageAnalytics;
-	if (new RegExp(`<${component}(?=[\\s/>])`).test(source)) return source;
 
-	// First child position = end of the root element's opening tag inside return.
-	const rootOpen = /return\s*\(\s*\n(\s*)<(\w+)([^>]*)>/.exec(source);
+	// Everything here is scoped to the exported page component. A route file
+	// often declares small helper components above it, so the first `return (`
+	// in the file usually belongs to one of those — putting the marker there
+	// would fire a page view once per helper render.
+	const body = defaultExportBody(source);
+	if (!body) return source;
+	if (new RegExp(`<${component}(?=[\\s/>])`).test(body.text)) return source;
+
+	// First child position = end of the root element's opening tag.
+	const rootOpen = /return\s*\(\s*\n(\s*)<(\w+)([^>]*)>/.exec(body.text);
 	if (!rootOpen) return source;
 
-	const insertAt = rootOpen.index + rootOpen[0].length;
+	const insertAt = body.start + rootOpen.index + rootOpen[0].length;
 	const indent = `${rootOpen[1]}\t`;
 	const withComponent = `${source.slice(0, insertAt)}\n${indent}<${component} pageName="${pageName}" />${source.slice(insertAt)}`;
 
 	return ensureImport(withComponent, component, importFrom);
+}
+
+/**
+ * Renders one JSX prop.
+ *
+ * A prop is `[name, value]` for a string literal, or `[name, value, "expr"]`
+ * when the value is JavaScript that must stay unquoted, as in
+ * `trackingLabel={item.label}`.
+ */
+function renderProp([name, value, kind]) {
+	if (kind === "expr" || typeof value === "number") {
+		return `${name}={${value}}`;
+	}
+	return `${name}="${escapeAttr(String(value))}"`;
 }
 
 /** Rewrites one element's opening tag: new name + added props. */
@@ -75,11 +96,7 @@ function retagElement(source, element, newTagName, props) {
 
 	const rendered = props
 		.filter(([, value]) => value !== undefined && value !== null)
-		.map(([name, value]) =>
-			typeof value === "number"
-				? `${name}={${value}}`
-				: `${name}="${escapeAttr(String(value))}"`,
-		);
+		.map(renderProp);
 
 	const attrLines = attrs
 		? `${attrs}\n${rendered.map((p) => `${indent}${p}`).join("\n")}`
@@ -106,32 +123,57 @@ function escapeAttr(value) {
  */
 export function trackLink(source, { policy, element, pageName, position }) {
 	const { component, importFrom } = policy.conventions.trackedLink;
-	const label = element.label || readAttr(element.attrs, "href") || "link";
-
 	const props = [
-		["trackingLabel", label],
-		["trackingSource", pageName],
+		labelProp("trackingLabel", element, readAttr(element.attrs, "href")),
+		["trackingSource", element.source || pageName],
 	];
-	if (typeof position === "number") props.push(["trackingPosition", position]);
+
+	// Inside a `.map()` the loop index is the position. Without an index
+	// binding there is no per-item value, and a constant would claim every item
+	// sits in the same place — so the (recommended, not required) prop is left
+	// off for a human to fill in.
+	if (element.mapIndex) {
+		props.push(["trackingPosition", element.mapIndex, "expr"]);
+	} else if (!element.inMap && typeof position === "number") {
+		props.push(["trackingPosition", position]);
+	}
 
 	const retagged = retagElement(source, element, component, props);
 	const withImport = ensureImport(retagged, component, importFrom);
 	return dropUnusedImport(withImport, "Link");
 }
 
+/**
+ * The `trackingLabel` prop: an expression when the visible text comes from a
+ * variable, a literal when it is static.
+ */
+function labelProp(name, element, fallback) {
+	if (element.labelExpr) return [name, element.labelExpr, "expr"];
+	return [name, element.label || fallback || "link"];
+}
+
 /** BTN-001 — turn a `<button>` into a `<TrackedButton>`. */
 export function trackButton(source, { policy, element, pageName }) {
 	const { component, importFrom } = policy.conventions.trackedButton;
-	const label = element.label || "button";
+	const sectionName = element.source || pageName;
 
 	const props = [
-		["trackingAction", toSnakeCase(label)],
-		["trackingLabel", label],
-		["trackingSource", pageName],
+		["trackingAction", buttonAction(element, sectionName)],
+		labelProp("trackingLabel", element, "button"),
+		["trackingSource", sectionName],
 	];
 
 	const retagged = retagElement(source, element, component, props);
 	return ensureImport(retagged, component, importFrom);
+}
+
+/**
+ * A stable `snake_case` action id. Derived from the visible label when it is
+ * static; a dynamic label cannot name a fixed action, so the section does.
+ */
+function buttonAction(element, sectionName) {
+	if (element.labelExpr || !element.label) return `${sectionName}_click`;
+	return toSnakeCase(element.label);
 }
 
 /** LINK-002 / BTN-002 — add the props a tracked element is missing. */
